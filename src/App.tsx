@@ -1,375 +1,145 @@
-// src/App.tsx
-import React, { useEffect, useMemo, useState } from "react";
-import ProductCard from "./components/ProductCard";
-import Modal from "./components/Modal";
-import Button from "./components/Button";
-import FormInput from "./components/FormInput";
+import { useMemo, useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
-
-// 📌 استيراد الصور المحلية
-import nikeImg from "./assets/img/nike.jpg";
-import carImg from "./assets/img/car.jpeg";
-import laptopImg from "./assets/img/laptop.jpeg";
-import iphoneImg from "./assets/img/iphone.jpeg";
-import homeImg from "./assets/img/home.jpeg";
-import samsongImg from "./assets/img/samsong.jpeg";
-
-
-type Product = {
-  id: number;
-  title: string;
-  description: string;
-  price: number;
-  imageUrl: string;
-  colors: string[];
-  category: string;
-};
+import Button from "./components/Button";
+import ConfirmDialog from "./components/ConfirmDialog";
+import EmptyState from "./components/EmptyState";
+import Footer from "./components/Footer";
+import Header from "./components/Header";
+import Hero from "./components/Hero";
+import Modal from "./components/Modal";
+import ProductCard from "./components/ProductCard";
+import ProductForm, { PRODUCT_FORM_ID } from "./components/ProductForm";
+import Toolbar from "./components/Toolbar";
+import { INITIAL_PRODUCTS } from "./data/products";
+import { filterProducts } from "./lib/filterProducts";
+import type { Category, Product, ProductInput, SortKey } from "./types/product";
 
 function App() {
-  const initialProducts = useMemo<Product[]>(
-    () => [
-      {
-        id: 1,
-        title: "Nike Shoes",
-        description: "A pair of stylish red shoes.",
-        price: 100,
-        imageUrl: nikeImg, // صورة محلية
-        colors: ["red", "black"],
-        category: "clothes",
-      },
-      {
-        id: 2,
-        title: "Car Model X",
-        description: "A sleek sports car.",
-        price: 50000,
-        imageUrl: carImg, // صورة محلية
-        colors: ["blue"],
-        category: "cars",
-      },
-      {
-        id: 3,
-        title: "Laptop",
-        description: "Perfect for study and work.",
-        price: 1500,
-        imageUrl: laptopImg, // صورة محلية
-        colors: ["gray", "black"],
-        category: "electronics",
-      },
-      {
-        id: 4,
-        title: "iPhone",
-        description: "Latest Apple smartphone.",
-        price: 1200,
-        imageUrl: iphoneImg, // صورة محلية
-        colors: ["white", "black"],
-        category: "electronics",
-      },
-      {
-        id: 5,
-        title: "Home",
-        description: "Home smart-home.",
-        price: 120000,
-        imageUrl: homeImg, // صورة محلية
-        colors: ["white", "red"],
-        category: "electronics",
-      },
-      {
-        id: 6,
-        title: "Samsong",
-        description: "Latest Samsong smartphone.",
-        price: 1150,
-        imageUrl: samsongImg, // صورة محلية
-        colors: ["blue", "black"],
-        category: "electronics",
-      },
-    ],
-    []
-  );
+  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
 
-  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<Category | "All">("All");
+  const [sort, setSort] = useState<SortKey>("featured");
 
-  // ✏️ Edit Modal
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [formTitle, setFormTitle] = useState("");
-  const [formPrice, setFormPrice] = useState("");
-  const [formDescription, setFormDescription] = useState("");
-  const [formImageUrl, setFormImageUrl] = useState("");
-  const [formCategory, setFormCategory] = useState("clothes");
-  const [errors, setErrors] = useState<{ title?: string; price?: string }>({});
+  // The product is kept separately from `open` so dialog content doesn't change while it animates out.
+  const [form, setForm] = useState<{ open: boolean; product: Product | null }>({ open: false, product: null });
+  const [deleting, setDeleting] = useState<{ open: boolean; product: Product | null }>({ open: false, product: null });
 
-  useEffect(() => {
-    if (!selectedProduct) return;
-    setFormTitle(selectedProduct.title);
-    setFormPrice(String(selectedProduct.price));
-    setFormDescription(selectedProduct.description);
-    setFormImageUrl(selectedProduct.imageUrl);
-    setFormCategory(selectedProduct.category);
-    setErrors({});
-  }, [selectedProduct]);
+  const visible = useMemo(() => filterProducts(products, { query, category, sort }), [products, query, category, sort]);
+  const hasFilters = query.trim() !== "" || category !== "All";
 
-  const validateProduct = (title: string, price: string) => {
-    const newErrors: { title?: string; price?: string } = {};
-    if (!title.trim()) newErrors.title = "Title is required.";
-    const priceNum = Number(price);
-    if (Number.isNaN(priceNum) || priceNum < 0) {
-      newErrors.price = "Price must be a number ≥ 0.";
+  const closeForm = () => setForm((f) => ({ ...f, open: false }));
+  const closeDelete = () => setDeleting((d) => ({ ...d, open: false }));
+
+  const handleSubmit = (input: ProductInput) => {
+    const editing = form.product;
+    if (editing) {
+      setProducts((prev) => prev.map((p) => (p.id === editing.id ? { ...p, ...input } : p)));
+      toast.success("Product updated");
+    } else {
+      setProducts((prev) => [{ ...input, id: Math.max(0, ...prev.map((p) => p.id)) + 1 }, ...prev]);
+      toast.success("Product added");
     }
-    return newErrors;
+    closeForm();
   };
 
-  const handleSave = () => {
-    if (!selectedProduct) return;
-    const newErrors = validateProduct(formTitle, formPrice);
-    setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) return;
-
-    const priceNum = Number(formPrice);
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === selectedProduct.id
-          ? {
-              ...p,
-              title: formTitle.trim(),
-              price: priceNum,
-              description: formDescription.trim(),
-              imageUrl: formImageUrl.trim(),
-              category: formCategory,
-            }
-          : p
-      )
-    );
-    toast.success("Product updated!");
-    closeEdit();
+  const handleConfirmDelete = () => {
+    const target = deleting.product;
+    if (target) {
+      setProducts((prev) => prev.filter((p) => p.id !== target.id));
+      toast.success("Product deleted");
+    }
+    closeDelete();
   };
 
-  const openEdit = (p: Product) => {
-    setSelectedProduct(p);
-    setIsEditOpen(true);
-  };
-
-  const closeEdit = () => {
-    setIsEditOpen(false);
-    setSelectedProduct(null);
-    setErrors({});
-  };
-
-  const handleRemove = (p: Product) => {
-    setProducts((prev) => prev.filter((x) => x.id !== p.id));
-    toast.success("Product removed!");
-  };
-
-  // ➕ Add Product Modal
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newPrice, setNewPrice] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newImageUrl, setNewImageUrl] = useState("");
-  const [newCategory, setNewCategory] = useState("clothes");
-  const [newErrors, setNewErrors] = useState<{ title?: string; price?: string }>(
-    {}
-  );
-
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    const err = validateProduct(newTitle, newPrice);
-    setNewErrors(err);
-    if (Object.keys(err).length > 0) return;
-
-    const nextId =
-      products.length > 0 ? Math.max(...products.map((p) => p.id)) + 1 : 1;
-
-    const product: Product = {
-      id: nextId,
-      title: newTitle.trim(),
-      description: newDescription.trim(),
-      price: Number(newPrice),
-      imageUrl: newImageUrl || "https://via.placeholder.com/320x200",
-      colors: ["gray"],
-      category: newCategory,
-    };
-
-    setProducts((prev) => [product, ...prev]);
-    toast.success("Product created!");
-    setIsAddOpen(false);
-    setNewTitle("");
-    setNewPrice("");
-    setNewDescription("");
-    setNewImageUrl("");
+  const clearFilters = () => {
+    setQuery("");
+    setCategory("All");
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <Toaster position="top-right" />
+    <div className="flex min-h-dvh flex-col">
+      <Toaster position="bottom-center" toastOptions={{ className: "!text-sm" }} />
+      <Header onAdd={() => setForm({ open: true, product: null })} />
 
-      <h1 className="text-3xl font-bold text-center p-5 text-blue-600">
-        Mini E-commerce Home Page
-      </h1>
+      <main className="flex-1">
+        <Hero />
 
-      <div className="max-w-6xl mx-auto px-4 pb-10">
-        <Button variant="primary" onClick={() => setIsAddOpen(true)}>
-          Build a Product
-        </Button>
+        <section id="catalog" aria-labelledby="catalog-heading" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-8 sm:px-6 sm:py-10">
+          <div className="mb-5 flex items-baseline justify-between gap-4">
+            <h2 id="catalog-heading" className="text-xl font-semibold text-slate-900">
+              Products
+            </h2>
+            <p role="status" className="text-sm text-slate-500">
+              {visible.length} {visible.length === 1 ? "product" : "products"}
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-          {products.map((p) => (
-            <ProductCard
-              key={p.id}
-              title={p.title}
-              description={p.description}
-              price={p.price}
-              imageUrl={p.imageUrl}
-              colors={p.colors}
-              category={p.category}
-              onEdit={() => openEdit(p)}
-              onRemove={() => handleRemove(p)}
-            />
-          ))}
-        </div>
-      </div>
+          <Toolbar query={query} onQueryChange={setQuery} category={category} onCategoryChange={setCategory} sort={sort} onSortChange={setSort} />
 
-      {/* Add Modal */}
+          <div className="mt-6">
+            {visible.length > 0 ? (
+              <ul className="grid grid-cols-1 gap-5 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {visible.map((p) => (
+                  <li key={p.id} className="flex">
+                    <ProductCard
+                      product={p}
+                      onEdit={(product) => setForm({ open: true, product })}
+                      onDelete={(product) => setDeleting({ open: true, product })}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : hasFilters ? (
+              <EmptyState
+                title="No products found"
+                message="Nothing matches your search or filter. Try a different name or category."
+                action={
+                  <Button variant="secondary" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                title="Your catalog is empty"
+                message="Add your first product to get started."
+                action={<Button onClick={() => setForm({ open: true, product: null })}>Add product</Button>}
+              />
+            )}
+          </div>
+        </section>
+      </main>
+
+      <Footer />
+
       <Modal
-        open={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
-        title="Build a Product"
-        actions={
+        open={form.open}
+        onClose={closeForm}
+        title={form.product ? "Edit product" : "Add product"}
+        description={form.product ? "Update the details below." : "Fill in the details of the new product."}
+        footer={
           <>
-            <Button variant="secondary" onClick={() => setIsAddOpen(false)}>
+            <Button variant="secondary" onClick={closeForm}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit" form="add-form">
-              Create
+            <Button type="submit" form={PRODUCT_FORM_ID}>
+              {form.product ? "Save changes" : "Add product"}
             </Button>
           </>
         }
       >
-        <form id="add-form" onSubmit={handleAdd} className="space-y-4">
-          <FormInput
-            label="Title"
-            name="new-title"
-            value={newTitle}
-            onChange={setNewTitle}
-            placeholder="Product title"
-            error={newErrors.title}
-          />
-          <FormInput
-            label="Price"
-            name="new-price"
-            type="number"
-            step="0.01"
-            min={0}
-            value={newPrice}
-            onChange={setNewPrice}
-            placeholder="0.00"
-            error={newErrors.price}
-          />
-          <FormInput
-            label="Image URL"
-            name="new-image"
-            value={newImageUrl}
-            onChange={setNewImageUrl}
-            placeholder="https://… or leave empty"
-          />
-          <div>
-            <label className="mb-1 block text-sm text-gray-600">Description</label>
-            <textarea
-              rows={3}
-              value={newDescription}
-              onChange={(e) => setNewDescription(e.target.value)}
-              placeholder="Short product description"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-gray-600">Category</label>
-            <select
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value)}
-              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
-            >
-              <option value="clothes">Clothes</option>
-              <option value="cars">Cars</option>
-              <option value="electronics">Electronics</option>
-            </select>
-          </div>
-        </form>
+        <ProductForm product={form.product} onSubmit={handleSubmit} />
       </Modal>
 
-      {/* Edit Modal */}
-      <Modal
-        open={isEditOpen}
-        onClose={closeEdit}
-        title={selectedProduct ? `Edit: ${selectedProduct.title}` : "Edit Product"}
-        actions={
-          <>
-            <Button variant="secondary" onClick={closeEdit}>
-              Cancel
-            </Button>
-            <Button variant="primary" type="submit" form="edit-form">
-              Save
-            </Button>
-          </>
-        }
-      >
-        <form
-          id="edit-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSave();
-          }}
-          className="space-y-4"
-        >
-          <FormInput
-            label="Title"
-            name="title"
-            value={formTitle}
-            onChange={setFormTitle}
-            placeholder="Product title"
-            error={errors.title}
-          />
-          <FormInput
-            label="Price"
-            name="price"
-            type="number"
-            step="0.01"
-            min={0}
-            value={formPrice}
-            onChange={setFormPrice}
-            placeholder="0.00"
-            error={errors.price}
-          />
-          <FormInput
-            label="Image URL"
-            name="image"
-            value={formImageUrl}
-            onChange={setFormImageUrl}
-            placeholder="https://..."
-          />
-          <div>
-            <label className="mb-1 block text-sm text-gray-600">Description</label>
-            <textarea
-              rows={3}
-              value={formDescription}
-              onChange={(e) => setFormDescription(e.target.value)}
-              placeholder="Short product description"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-blue-500"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-gray-600">Category</label>
-            <select
-              value={formCategory}
-              onChange={(e) => setFormCategory(e.target.value)}
-              className="w-full rounded-md border px-3 py-2 outline-none focus:border-blue-500"
-            >
-              <option value="clothes">Clothes</option>
-              <option value="cars">Cars</option>
-              <option value="electronics">Electronics</option>
-            </select>
-          </div>
-        </form>
-      </Modal>
+      <ConfirmDialog
+        open={deleting.open}
+        title="Delete product?"
+        message={`“${deleting.product?.title ?? ""}” will be removed from the catalog. This can't be undone.`}
+        confirmLabel="Delete"
+        onConfirm={handleConfirmDelete}
+        onCancel={closeDelete}
+      />
     </div>
   );
 }
