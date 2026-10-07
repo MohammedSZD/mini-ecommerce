@@ -1,16 +1,29 @@
-// Allowed categories
-export type Category = "shoes" | "cars" | "electronics" | "clothes";
+export const CATEGORIES = [
+  "Smartphones",
+  "Laptops",
+  "Audio",
+  "Wearables",
+  "Accessories",
+] as const;
 
-// Hex color like #RRGGBB
-export type HexColor = `#${string}`;
+export type Category = (typeof CATEGORIES)[number];
 
-// Product shape
+export interface ProductColor {
+  name: string;
+  hex: string;
+}
+
 export interface Product {
   id: number;
   title: string;
   description: string;
-  price: number;        // >= 0 (ن enforced بالتحقق قبل الحفظ)
-  imageUrl: string;     // URL
+  price: number;
+  imageUrl: string;
   category: Category;
-  colors?: HexColor[];  // optional
+  colors: ProductColor[];
 }
+
+/** Fields the user edits in the add/edit form (everything except the id). */
+export type ProductInput = Omit<Product, "id">;
+
+export type SortKey = "featured" | "price-asc" | "price-desc" | "name";

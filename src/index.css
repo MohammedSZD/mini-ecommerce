@@ -1,3 +1,29 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+  }
+
+  /* One consistent, visible keyboard focus style for every interactive element. */
+  :where(a, button, input, select, textarea, summary):focus-visible {
+    @apply outline-none ring-2 ring-indigo-600 ring-offset-2 ring-offset-white;
+  }
+
+  :where(input, select, textarea):focus-visible {
+    @apply border-indigo-600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
